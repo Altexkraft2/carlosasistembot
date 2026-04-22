@@ -1,15 +1,17 @@
 """
 Configuración central del bot.
-Compatible con Render.
+Con soporte para SQLite.
 """
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+
+if os.path.exists('.env'):
+    load_dotenv()
 
 class Config:
-    """Configuración global del bot"""
-    
-    # Token del bot (desde variable de entorno en Render)
+    # Token del bot
     BOT_TOKEN = os.environ.get('BOT_TOKEN')
     
     # Configuración de recordatorios
@@ -23,12 +25,16 @@ class Config:
         {"start": "08:00", "end": "12:00"},
         {"start": "14:00", "end": "17:00"},
     ]
-    WORK_DAYS = [0, 1, 2, 3, 4]  # Lunes a Viernes
+    WORK_DAYS = [0, 1, 2, 3, 4]
     
-    # Rutas - En Render usamos /tmp para datos persistentes
+    # Rutas
     BASE_DIR = Path(__file__).parent
-    DATA_DIR = Path(os.environ.get('DATA_DIR', '/tmp/data'))
+    DATA_DIR = Path(os.environ.get('DATA_DIR', BASE_DIR / 'data'))
     DATA_FILE = DATA_DIR / 'recordatorios.json'
+    DB_FILE = DATA_DIR / 'bot.db'  # NUEVO
+    
+    # Flag para saber si usar SQLite o JSON
+    USE_DATABASE = os.environ.get('USE_DATABASE', 'true').lower() == 'true'
     
     @classmethod
     def is_work_time(cls, dt=None):
@@ -73,11 +79,12 @@ class Config:
     @classmethod
     def validate(cls):
         if not cls.BOT_TOKEN:
-            print("⚠️ ADVERTENCIA: BOT_TOKEN no configurado. Configúralo en Render.")
+            print("⚠️ ADVERTENCIA: BOT_TOKEN no configurado")
         cls.DATA_DIR.mkdir(exist_ok=True, parents=True)
         print(f"✅ Directorio de datos: {cls.DATA_DIR}")
+        print(f"✅ Base de datos: {cls.DB_FILE}")
+        print(f"✅ Usando: {'SQLite' if cls.USE_DATABASE else 'JSON'}")
 
-# Validar configuración
 try:
     Config.validate()
 except Exception as e:

@@ -2,9 +2,10 @@
 
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
-from services.reminder_service import ReminderService
+from services.reminder_service_db import ReminderServiceDB
 from utils.logger import setup_logger
 from config import Config
+from utils.validators import format_frequency
 
 logger = setup_logger(__name__)
 
@@ -23,7 +24,7 @@ async def grupo_estado_command(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("ℹ️ Este comando solo está disponible en grupos.")
         return
     
-    reminder_service: ReminderService = context.bot_data.get('reminder_service')
+    reminder_service: ReminderServiceDB = context.bot_data.get('reminder_service')
     if not reminder_service:
         await update.message.reply_text("❌ Error interno.")
         return
@@ -35,17 +36,19 @@ async def grupo_estado_command(update: Update, context: ContextTypes.DEFAULT_TYP
         return
     
     by_user = {}
-    for r in reminders.values():
-        if r.user_id not in by_user:
-            by_user[r.user_id] = []
-        by_user[r.user_id].append(r)
+    for r in reminders:
+        owner_id = r.user.telegram_id if r.user else "desconocido"
+        if owner_id not in by_user:
+            by_user[owner_id] = []
+        by_user[owner_id].append(r)
     
     message = f"📊 *RECORDATORIOS ACTIVOS*\nTotal: {len(reminders)}\n\n"
     for uid, user_reminders in by_user.items():
         message += f"*Usuario {uid[-4:]}*\n"
         for r in user_reminders:
             escaped_keyword = escape_markdown(r.keyword)
-            message += f"  🔑 `{escaped_keyword}` - {r.photos_received}/{Config.PHOTOS_REQUIRED} 📸\n"
+            freq_display = format_frequency(r.frequency_minutes)
+            message += f"  🔑 `{escaped_keyword}` - {r.photos_received}/{Config.PHOTOS_REQUIRED} 📸 - cada {freq_display}\n"
         message += "\n"
     
     await update.message.reply_text(message, parse_mode='Markdown')
@@ -64,7 +67,7 @@ async def limpiar_grupo_command(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("❌ Solo los administradores pueden usar este comando.")
         return
     
-    reminder_service: ReminderService = context.bot_data.get('reminder_service')
+    reminder_service: ReminderServiceDB = context.bot_data.get('reminder_service')
     if not reminder_service:
         await update.message.reply_text("❌ Error interno.")
         return
@@ -72,9 +75,12 @@ async def limpiar_grupo_command(update: Update, context: ContextTypes.DEFAULT_TY
     reminders = reminder_service.get_chat_reminders(chat_id)
     count = len(reminders)
     
-    for reminder in reminders.values():
+    for reminder in reminders:
         reminder.active = False
-        reminder_service.repository.save(reminder)
+        reminder_service.repository.save(
+            reminder, 
+            reminder.user.telegram_id if reminder.user else "unknown"
+        )
     
     await update.message.reply_text(f"✅ {count} recordatorios cancelados.")
     logger.info(f"🧹 /limpiar_grupo en chat {chat_id} por admin {user.id}")

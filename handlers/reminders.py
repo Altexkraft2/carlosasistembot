@@ -2,11 +2,12 @@
 
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
-from services.reminder_service import ReminderService
+from services.reminder_service_db import ReminderServiceDB
 from keyboards import inline_keyboards
 from utils.logger import setup_logger
 from config import Config
 from datetime import datetime
+from utils.validators import parse_frequency, format_frequency
 
 logger = setup_logger(__name__)
 
@@ -22,7 +23,7 @@ async def programar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(user.id)
     chat_id = update.effective_chat.id
     
-    reminder_service: ReminderService = context.bot_data.get('reminder_service')
+    reminder_service: ReminderServiceDB = context.bot_data.get('reminder_service')
     if not reminder_service:
         await update.message.reply_text("❌ Error interno.")
         return
@@ -30,8 +31,17 @@ async def programar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if not args:
         await update.message.reply_text(
-            "📝 *Uso:* `/programar [frecuencia] [palabra] [mensaje]`\n\n"
-            "*Ejemplos:*\n`/programar 5 MEDICINA Tomar pastilla`\n`/programar 10 REUNION`",
+            "📝 *Uso del comando:*\n"
+            "`/programar [frecuencia] [palabra] [mensaje]`\n\n"
+            "*Frecuencias válidas:*\n"
+            "• `5min`, `30min` → minutos\n"
+            "• `1h`, `2h` → horas\n"
+            "• `1:30`, `0:45` → horas:minutos\n"
+            "• `5`, `30` → minutos (por defecto)\n\n"
+            "*Ejemplos:*\n"
+            "`/programar 5min MEDICINA Tomar pastilla`\n"
+            "`/programar 1h REUNION Reunión importante`\n"
+            "`/programar 1:30 DESCANSO Pausa`",
             parse_mode='Markdown'
         )
         return
@@ -40,30 +50,38 @@ async def programar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyword = "RECORDATORIO"
     message = None
     
-    try:
-        frequency = int(args[0])
-        if len(args) > 1:
-            keyword = args[1].strip()
-            if len(args) > 2:
-                message = ' '.join(args[2:])
-    except ValueError:
-        keyword = args[0].strip()
-        if len(args) > 1:
-            message = ' '.join(args[1:])
+    if args:
+        try:
+            frequency = parse_frequency(args[0])
+            if len(args) > 1:
+                keyword = args[1].strip()
+                if len(args) > 2:
+                    message = ' '.join(args[2:])
+        except ValueError as e:
+            keyword = args[0].strip()
+            if len(args) > 1:
+                message = ' '.join(args[1:])
     
     if not message:
         message = f"⏰ ¡Es hora de tu recordatorio! Envía 2 fotos con '{keyword}'"
     
     try:
         reminder = reminder_service.create_reminder(
-            user_id=user_id, chat_id=chat_id,
-            frequency=frequency, message=message, keyword=keyword
+            user_telegram_id=user_id,
+            chat_id=chat_id,
+            frequency=frequency,
+            message=message,
+            keyword=keyword,
+            username=user.username,
+            first_name=user.first_name
         )
         
         escaped_keyword = escape_markdown(keyword)
+        freq_display = format_frequency(frequency)
+        
         success_message = (
             f"✅ *¡Recordatorio activado!*\n\n"
-            f"🔄 Frecuencia: cada {frequency} min\n"
+            f"🔄 Frecuencia: cada {freq_display}\n"
             f"🔑 Palabra clave: `{escaped_keyword}`\n"
             f"📝 Mensaje: {message}\n\n"
             f"📸 Envía 2 fotos con `{escaped_keyword}` para detenerlo."
@@ -73,7 +91,7 @@ async def programar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success_message, parse_mode='Markdown',
             reply_markup=inline_keyboards.get_reminder_actions_keyboard(user_id)
         )
-        logger.info(f"✅ Recordatorio creado: {reminder.id}")
+        logger.info(f"✅ Recordatorio creado: {reminder.reminder_id}")
         
     except ValueError as e:
         await update.message.reply_text(f"❌ {str(e)}")
@@ -84,7 +102,7 @@ async def estado_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     args = context.args
     
-    reminder_service: ReminderService = context.bot_data.get('reminder_service')
+    reminder_service: ReminderServiceDB = context.bot_data.get('reminder_service')
     if not reminder_service:
         await update.message.reply_text("❌ Error interno.")
         return
@@ -98,9 +116,13 @@ async def estado_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         estado_emoji = "🟢 ACTIVO" if status['active'] else "🔴 INACTIVO"
         escaped_keyword = escape_markdown(keyword)
+        freq_display = format_frequency(status['frequency'])
+        
         status_message = (
-            f"📊 *Estado: {escaped_keyword}*\n\n{estado_emoji}\n"
+            f"📊 *Estado: {escaped_keyword}*\n\n"
+            f"{estado_emoji}\n"
             f"📝 {status['message']}\n"
+            f"🔄 Frecuencia: cada {freq_display}\n"
             f"📸 Fotos: {status['photos_received']}/{status['photos_required']}\n"
             f"⚠️ Faltan: {status['photos_missing']} foto(s)"
         )
@@ -112,7 +134,7 @@ async def estado_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         message = "📊 *TUS RECORDATORIOS ACTIVOS*\n\n"
-        for r in reminders.values():
+        for r in reminders:
             escaped_keyword = escape_markdown(r.keyword)
             message += f"🔑 `{escaped_keyword}` - {r.photos_received}/{Config.PHOTOS_REQUIRED} 📸\n"
         message += "\nUsa `/estado [palabra]` para ver detalles."
@@ -124,7 +146,7 @@ async def cancelar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     args = context.args
     
-    reminder_service: ReminderService = context.bot_data.get('reminder_service')
+    reminder_service: ReminderServiceDB = context.bot_data.get('reminder_service')
     if not reminder_service:
         await update.message.reply_text("❌ Error interno.")
         return
