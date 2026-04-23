@@ -4,7 +4,7 @@ Repositorio con SQLAlchemy para producción.
 
 from typing import Optional, List
 from datetime import datetime
-from sqlalchemy.orm import Session, joinedload  # ← AÑADIR joinedload
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
 
 from database.models import (
@@ -53,15 +53,18 @@ class ReminderRepositoryDB:
     def find_by_keyword(self, user_telegram_id: str, chat_id: str, keyword: str) -> Optional[ReminderDB]:
         session = self._get_session()
         try:
-            reminder = session.query(ReminderDB).join(User).filter(
-                and_(
-                    User.telegram_id == user_telegram_id,
-                    ReminderDB.chat_id == str(chat_id),
-                    ReminderDB.keyword == keyword.upper(),
-                    ReminderDB.active == True
-                )
-            ).first()
-            # Desasociar de la sesión para evitar problemas
+            reminder = session.query(ReminderDB)\
+                .options(joinedload(ReminderDB.user))\
+                .join(User)\
+                .filter(
+                    and_(
+                        User.telegram_id == user_telegram_id,
+                        ReminderDB.chat_id == str(chat_id),
+                        ReminderDB.keyword == keyword.upper(),
+                        ReminderDB.active == True
+                    )
+                ).first()
+            
             if reminder:
                 session.expunge(reminder)
             return reminder
@@ -71,17 +74,21 @@ class ReminderRepositoryDB:
     def find_all_active(self) -> List[ReminderDB]:
         session = self._get_session()
         try:
-            return session.query(ReminderDB).filter(ReminderDB.active == True).all()
+            reminders = session.query(ReminderDB)\
+                .options(joinedload(ReminderDB.user))\
+                .filter(ReminderDB.active == True)\
+                .all()
+            
+            for r in reminders:
+                session.expunge(r)
+            
+            return reminders
         finally:
-            # No cerramos la sesión aquí porque los objetos se usan después
-            # La sesión se cerrará cuando se termine de usar
-            pass
+            session.close()
     
     def find_active_by_chat(self, chat_id: int) -> List[ReminderDB]:
-        """Obtiene recordatorios activos en un chat con el usuario cargado"""
         session = self._get_session()
         try:
-            # Cargar la relación 'user' en la misma consulta (eager loading)
             reminders = session.query(ReminderDB)\
                 .options(joinedload(ReminderDB.user))\
                 .filter(
@@ -91,11 +98,8 @@ class ReminderRepositoryDB:
                     )
                 ).all()
             
-            # Desasociar de la sesión para evitar DetachedInstanceError
             for r in reminders:
                 session.expunge(r)
-                if r.user:
-                    session.expunge(r.user)
             
             return reminders
         finally:
@@ -118,11 +122,8 @@ class ReminderRepositoryDB:
             
             reminders = query.all()
             
-            # Desasociar de la sesión
             for r in reminders:
                 session.expunge(r)
-                if r.user:
-                    session.expunge(r.user)
             
             return reminders
         finally:
@@ -175,10 +176,19 @@ class ReminderRepositoryDB:
     def delete_by_keyword(self, user_telegram_id: str, chat_id: int, keyword: str) -> bool:
         session = self._get_session()
         try:
-            reminder = self.find_by_keyword(user_telegram_id, str(chat_id), keyword)
+            user = session.query(User).filter(User.telegram_id == user_telegram_id).first()
+            if not user:
+                return False
+            
+            reminder = session.query(ReminderDB).filter(
+                and_(
+                    ReminderDB.user_id == user.id,
+                    ReminderDB.chat_id == str(chat_id),
+                    ReminderDB.keyword == keyword.upper()
+                )
+            ).first()
+            
             if reminder:
-                # Re-asociar a la sesión actual
-                reminder = session.merge(reminder)
                 reminder.active = False
                 session.commit()
                 logger.info(f"🗑️ Recordatorio desactivado: {reminder.reminder_id}")
