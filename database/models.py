@@ -10,6 +10,7 @@ from sqlalchemy import (
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from config import Config
+from sqlalchemy.pool import NullPool
 import os
 
 Base = declarative_base()
@@ -152,25 +153,24 @@ class PhotoLog(Base):
 
 
 # Configuración de la base de datos
-DATABASE_URL = f"sqlite:///{Config.DATA_DIR / 'bot.db'}"
+DATABASE_URL = f"sqlite:///{Config.DB_FILE}"
 
 engine = create_engine(
-    DATABASE_URL, 
-    connect_args={"check_same_thread": False},  # Necesario para SQLite
-    echo=False
+    DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    echo=False,
+    poolclass=NullPool  # ✅ NullPool para evitar errores de pool
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = sessionmaker(
+    autocommit=False, 
+    autoflush=False, 
+    bind=engine,
+    expire_on_commit=False
+)
 
 def init_db():
     """Inicializa la base de datos creando todas las tablas"""
+    Config.DATA_DIR.mkdir(exist_ok=True, parents=True)
     Base.metadata.create_all(bind=engine)
-    print("✅ Base de datos inicializada")
-
-def get_db():
-    """Obtiene una sesión de base de datos"""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    print(f"✅ Base de datos inicializada en: {Config.DB_FILE}")

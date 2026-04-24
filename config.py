@@ -47,7 +47,7 @@ class Config:
         for period in cls.WORK_HOURS:
             if period["start"] <= current_time < period["end"]:
                 return True
-        return False
+        return True
     
     @classmethod
     def get_next_work_time(cls, dt=None):
