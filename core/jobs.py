@@ -1,11 +1,10 @@
 """
 Tareas programadas del bot.
-Compatible con PTB 21.x
 """
 
 from datetime import datetime
 from telegram.ext import ContextTypes
-from services.alert_service import AlertService
+from services.alert_service_db import AlertServiceDB
 from utils.logger import setup_logger
 from config import Config
 
@@ -14,7 +13,7 @@ _job_configured = False
 
 async def check_reminders_job(context: ContextTypes.DEFAULT_TYPE):
     """Job que verifica y envía alertas"""
-    alert_service: AlertService = context.bot_data.get('alert_service')
+    alert_service: AlertServiceDB = context.bot_data.get('alert_service')
     
     if not alert_service:
         logger.error("❌ AlertService no encontrado")
@@ -31,7 +30,13 @@ async def heartbeat_job(context: ContextTypes.DEFAULT_TYPE):
     """Job de heartbeat"""
     now = datetime.now()
     reminder_service = context.bot_data.get('reminder_service')
-    active = reminder_service.repository.count_active() if reminder_service else 0
+    if reminder_service:
+        try:
+            active = reminder_service.repository.count_active()
+        except:
+            active = 0
+    else:
+        active = 0
     logger.info(f"💓 Heartbeat: {now.strftime('%H:%M')} | Activos: {active}")
 
 def setup_jobs(bot_app):
@@ -46,12 +51,11 @@ def setup_jobs(bot_app):
     
     reminder_service = bot_app.reminder_service
     
-    alert_service = AlertService(reminder_service)
+    alert_service = AlertServiceDB(reminder_service)
     alert_service.set_bot(app.bot)
     
     app.bot_data['alert_service'] = alert_service
     
-    # Job principal
     job_queue.run_repeating(
         check_reminders_job,
         interval=Config.CHECK_INTERVAL_SECONDS,
@@ -60,7 +64,6 @@ def setup_jobs(bot_app):
     )
     logger.info(f"✅ Job configurado (cada {Config.CHECK_INTERVAL_SECONDS}s)")
     
-    # Job heartbeat
     job_queue.run_repeating(
         heartbeat_job,
         interval=3600,

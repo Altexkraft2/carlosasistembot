@@ -56,10 +56,16 @@ class ReminderServiceDB:
             return self.repository.delete_by_keyword(user_telegram_id, chat_id, keyword)
         else:
             reminders = self.repository.find_active_by_user(user_telegram_id, chat_id)
+            if not reminders:
+                return False
             for r in reminders:
                 r.active = False
                 self.repository.save(r, user_telegram_id)
-            return len(reminders) > 0
+            return True
+    
+    def get_active_reminder(self, user_telegram_id: str, chat_id: int, keyword: str) -> Optional[ReminderDB]:
+        """Obtiene un recordatorio activo específico"""
+        return self.repository.find_by_keyword(user_telegram_id, str(chat_id), keyword)
     
     def get_user_reminders(self, user_telegram_id: str, chat_id: int) -> List[ReminderDB]:
         """Obtiene recordatorios de un usuario"""
@@ -104,7 +110,7 @@ class ReminderServiceDB:
         }
     
     def get_all_active_reminders(self) -> List[ReminderDB]:
-        """Obtiene todos los recordatorios activos"""
+        """Obtiene todos los recordatorios activos (RETORNA LISTA)"""
         return self.repository.find_all_active()
     
     def get_stats(self) -> Dict:
