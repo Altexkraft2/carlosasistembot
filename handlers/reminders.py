@@ -24,12 +24,12 @@ async def programar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = str(user.id)
     chat_id = update.effective_chat.id
-    
+
     reminder_service: ReminderServiceDB = context.bot_data.get('reminder_service')
     if not reminder_service:
         await update.message.reply_text("❌ Error interno.")
         return
-    
+
     args = context.args
     if not args:
         await update.message.reply_text(
@@ -46,11 +46,11 @@ async def programar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
         return
-    
+
     frequency = Config.DEFAULT_FREQUENCY_MINUTES
     keyword = "RECORDATORIO"
     message = None
-    
+
     if args:
         try:
             frequency = parse_frequency(args[0])
@@ -62,10 +62,10 @@ async def programar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             keyword = args[0].strip()
             if len(args) > 1:
                 message = ' '.join(args[1:])
-    
+
     if not message:
         message = f"⏰ ¡Es hora de tu recordatorio! Envía 2 fotos con '{keyword}'"
-    
+
     try:
         reminder = reminder_service.create_reminder(
             user_telegram_id=user_id,
@@ -76,10 +76,10 @@ async def programar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             username=user.username,
             first_name=user.first_name
         )
-        
+
         escaped_keyword = escape_markdown(keyword)
         freq_display = format_frequency(frequency)
-        
+
         await update.message.reply_text(
             f"✅ *¡Recordatorio activado!*\n\n"
             f"🔄 Frecuencia: cada {freq_display}\n"
@@ -90,7 +90,7 @@ async def programar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=inline_keyboards.get_reminder_actions_keyboard(user_id)
         )
         logger.info(f"✅ Recordatorio creado: {reminder.reminder_id}")
-        
+
     except ValueError as e:
         await update.message.reply_text(f"❌ {str(e)}")
 
@@ -99,7 +99,7 @@ async def recordar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = str(user.id)
     chat_id = update.effective_chat.id
-    
+
     replied_message = update.message.reply_to_message
     if not replied_message:
         await update.message.reply_text(
@@ -111,12 +111,12 @@ async def recordar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
         return
-    
+
     reminder_service: ReminderServiceDB = context.bot_data.get('reminder_service')
     if not reminder_service:
         await update.message.reply_text("❌ Error interno.")
         return
-    
+
     args = context.args
     if not args:
         await update.message.reply_text(
@@ -125,23 +125,23 @@ async def recordar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
         return
-    
+
     frequency = Config.DEFAULT_FREQUENCY_MINUTES
     keyword = "RECORDATORIO"
-    
+
     try:
         frequency = parse_frequency(args[0])
         if len(args) > 1:
             keyword = args[1].strip()
     except ValueError:
         keyword = args[0].strip()
-    
+
     # Datos del mensaje original
     original_type = 'text'
     original_file_id = None
     original_caption = replied_message.caption or ""
     original_text = replied_message.text or replied_message.caption or ""
-    
+
     if replied_message.photo:
         original_type = 'photo'
         original_file_id = replied_message.photo[-1].file_id
@@ -157,9 +157,9 @@ async def recordar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif replied_message.voice:
         original_type = 'voice'
         original_file_id = replied_message.voice.file_id
-    
+
     record_message = original_text[:500] if original_text else f"Recordatorio: {keyword}"
-    
+
     try:
         reminder = ReminderDB(
             chat_id=str(chat_id),
@@ -175,12 +175,12 @@ async def recordar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             original_caption=original_caption,
             original_file_id=original_file_id
         )
-        
+
         saved = reminder_service.repository.save(reminder, user_id, user.username, user.first_name)
-        
+
         escaped_keyword = escape_markdown(keyword)
         freq_display = format_frequency(frequency)
-        
+
         await update.message.reply_text(
             f"✅ *¡Recordatorio simple creado!*\n\n"
             f"🔄 Frecuencia: cada {freq_display}\n"
@@ -190,7 +190,7 @@ async def recordar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown'
         )
         logger.info(f"✅ Recordatorio simple creado: {saved.reminder_id}")
-        
+
     except ValueError as e:
         await update.message.reply_text(f"❌ {str(e)}")
 
@@ -200,24 +200,24 @@ async def estado_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(user.id)
     chat_id = update.effective_chat.id
     args = context.args
-    
+
     reminder_service: ReminderServiceDB = context.bot_data.get('reminder_service')
     if not reminder_service:
         await update.message.reply_text("❌ Error interno.")
         return
-    
+
     if args:
         keyword = args[0].strip()
         status = reminder_service.get_reminder_status(user_id, chat_id, keyword)
         if not status:
             await update.message.reply_text(f"ℹ️ No hay recordatorio con palabra '{keyword}'.")
             return
-        
+
         estado_emoji = "🟢 ACTIVO" if status['active'] else "🔴 INACTIVO"
         escaped_keyword = escape_markdown(keyword)
         freq_display = format_frequency(status['frequency'])
         tipo = "📸 Verificación por fotos" if status.get('reminder_type', 'photo_verify') == 'photo_verify' else "📝 Simple (sin fotos)"
-        
+
         status_message = (
             f"📊 *Estado: {escaped_keyword}*\n\n"
             f"{estado_emoji} | {tipo}\n"
@@ -232,7 +232,7 @@ async def estado_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not reminders:
             await update.message.reply_text("ℹ️ No tienes recordatorios activos.")
             return
-        
+
         message = "📊 *TUS RECORDATORIOS ACTIVOS*\n\n"
         for r in reminders:
             escaped_keyword = escape_markdown(r.keyword)
@@ -247,15 +247,15 @@ async def cancelar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(user.id)
     chat_id = update.effective_chat.id
     args = context.args
-    
+
     reminder_service: ReminderServiceDB = context.bot_data.get('reminder_service')
     if not reminder_service:
         await update.message.reply_text("❌ Error interno.")
         return
-    
+
     keyword = args[0].strip() if args else None
     cancelled = reminder_service.cancel_reminder(user_id, chat_id, keyword)
-    
+
     if cancelled:
         if keyword:
             await update.message.reply_text(f"✅ Recordatorio '{keyword}' cancelado.")

@@ -29,18 +29,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown',
             reply_markup=inline_keyboards.get_main_menu_keyboard()
         )
+    
     elif data == "menu_estado":
         await query.edit_message_text(
             "Usa `/estado` para ver tus recordatorios activos.",
             parse_mode='Markdown',
             reply_markup=inline_keyboards.get_main_menu_keyboard()
         )
+    
     elif data == "menu_ayuda":
         await query.edit_message_text(
             "*AYUDA*\n/programar - /recordar - /estado - /cancelar - /horario",
             parse_mode='Markdown',
             reply_markup=inline_keyboards.get_help_keyboard()
         )
+    
     elif data == "menu_horario":
         now = datetime.now()
         is_work = Config.is_work_time(now)
@@ -54,21 +57,25 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='Markdown',
             reply_markup=inline_keyboards.get_main_menu_keyboard()
         )
+    
     elif data == "menu_acerca":
         await query.edit_message_text(
             "🤖 Bot de Recordatorios v2.0\n📸 Verificación por fotos\n📝 Recordatorios simples",
             reply_markup=inline_keyboards.get_main_menu_keyboard()
         )
+    
     elif data == "menu_principal":
         await query.edit_message_text(
             "¿Qué quieres hacer?",
             reply_markup=inline_keyboards.get_main_menu_keyboard()
         )
+    
     elif data == "cancelar_recordatorio":
         await query.edit_message_text(
             "Usa `/cancelar` para cancelar todos tus recordatorios o `/cancelar [palabra]` para uno específico.",
             parse_mode='Markdown'
         )
+    
     elif data.startswith("seleccionar_hora_"):
         hora = data.replace("seleccionar_hora_", "")
         context.user_data['temp_hora'] = hora
@@ -76,6 +83,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🕐 Hora: {hora}\n\nSelecciona la frecuencia:",
             reply_markup=inline_keyboards.get_frequency_selection_keyboard()
         )
+    
     elif data.startswith("frecuencia_"):
         frecuencia = data.replace("frecuencia_", "")
         hora = context.user_data.get('temp_hora', '14:00')
@@ -92,11 +100,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 parse_mode='Markdown',
                 reply_markup=inline_keyboards.get_main_menu_keyboard()
             )
+    
     elif data == "cancelar_seleccion":
         await query.edit_message_text(
             "Operación cancelada.",
             reply_markup=inline_keyboards.get_main_menu_keyboard()
         )
+    
     else:
         await query.edit_message_text("Opción no disponible")
 

@@ -1,4 +1,4 @@
-##!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Bot de Telegram para recordatorios con verificación por fotos.
 Versión final con health check para Render.

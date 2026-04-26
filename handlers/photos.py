@@ -5,7 +5,6 @@ from telegram.ext import MessageHandler, ContextTypes, filters
 from services.photo_service_db import PhotoServiceDB
 from keyboards import inline_keyboards
 from utils.logger import setup_logger
-from config import Config
 
 logger = setup_logger(__name__)
 
@@ -16,24 +15,24 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     caption = update.message.caption or ""
     media_group_id = update.message.media_group_id
-    
+
     if media_group_id:
         logger.info(f"📸 Foto de álbum: media_group={media_group_id}, caption='{caption[:30] if caption else '(vacío)'}'")
         album_key = f"album_{media_group_id}"
-        
+
         if caption:
             context.user_data[album_key] = {'caption': caption, 'photos_processed': 0}
             logger.debug(f"📝 Caption guardado: '{caption}'")
-        
+
         album_data = context.user_data.get(album_key, {})
         effective_caption = caption if caption else album_data.get('caption', '')
-        
+
         if not effective_caption:
             return
-        
+
         album_data['photos_processed'] = album_data.get('photos_processed', 0) + 1
         context.user_data[album_key] = album_data
-        
+
         await _process_album_photo(update, context, user_id, chat_id, effective_caption, user, media_group_id, album_data['photos_processed'])
     else:
         logger.info(f"📸 Foto individual: '{caption[:50]}'")
@@ -41,11 +40,12 @@ async def photo_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def _process_single_photo(update: Update, context: ContextTypes.DEFAULT_TYPE,
                                 user_id: str, chat_id: int, caption: str, user):
+    """Procesa una foto individual"""
     photo_service: PhotoServiceDB = context.bot_data.get('photo_service')
     if not photo_service:
         await update.message.reply_text("❌ Error interno.")
         return
-    
+
     result = photo_service.process_photo(
         user_telegram_id=user_id, chat_id=chat_id, caption=caption,
         username=user.username, first_name=user.first_name
@@ -55,16 +55,17 @@ async def _process_single_photo(update: Update, context: ContextTypes.DEFAULT_TY
 async def _process_album_photo(update: Update, context: ContextTypes.DEFAULT_TYPE,
                                user_id: str, chat_id: int, caption: str, user,
                                media_group_id: str, photo_number: int):
+    """Procesa una foto de álbum"""
     photo_service: PhotoServiceDB = context.bot_data.get('photo_service')
     if not photo_service:
         await update.message.reply_text("❌ Error interno.")
         return
-    
+
     result = photo_service.process_photo(
         user_telegram_id=user_id, chat_id=chat_id, caption=caption,
         username=user.username, first_name=user.first_name
     )
-    
+
     if result.get('completed'):
         await update.message.reply_text(result['message'])
     elif result.get('success') and photo_number == 1:
@@ -79,6 +80,7 @@ async def _process_album_photo(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
 async def _send_result(update: Update, result: dict, user_id: str):
+    """Envía el resultado del procesamiento de fotos"""
     if result.get('completed'):
         await update.message.reply_text(result['message'])
     elif result.get('success'):
