@@ -143,10 +143,8 @@ async def _process_album_photo(update: Update, context: ContextTypes.DEFAULT_TYP
     if completed:
         # ¡Completado!
         await update.message.reply_text(
-            f"🎉 ¡FELICITACIONES! 🎉\n"
             f"📸 ¡Álbum recibido! Has completado las {Config.PHOTOS_REQUIRED} fotos requeridas.\n"
-            f"✅ Recordatorio '{matching_reminder.keyword}' completado.\n"
-            f"🔕 Las alertas se han detenido.",
+            f"✅ Recordatorio '{matching_reminder.keyword}' completado.\n",
             parse_mode='Markdown'
         )
         

@@ -22,9 +22,13 @@ async def programar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = str(user.id)
     chat_id = update.effective_chat.id
+    chat_type = update.effective_chat.type
+    
+    logger.info(f"📝 /programar recibido de user={user_id} en chat={chat_id} (tipo={chat_type})")
     
     reminder_service: ReminderServiceDB = context.bot_data.get('reminder_service')
     if not reminder_service:
+        logger.error("❌ ReminderService no disponible")
         await update.message.reply_text("❌ Error interno.")
         return
     
@@ -65,6 +69,8 @@ async def programar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not message:
         message = f"⏰ ¡Es hora de tu recordatorio! Envía 2 fotos con '{keyword}'"
     
+    logger.info(f"📝 Creando recordatorio: freq={frequency}, keyword='{keyword}', chat_id={chat_id}")
+    
     try:
         reminder = reminder_service.create_reminder(
             user_telegram_id=user_id,
@@ -91,9 +97,10 @@ async def programar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             success_message, parse_mode='Markdown',
             reply_markup=inline_keyboards.get_reminder_actions_keyboard(user_id)
         )
-        logger.info(f"✅ Recordatorio creado: {reminder.reminder_id}")
+        logger.info(f"✅ Recordatorio creado exitosamente: {reminder.reminder_id}")
         
     except ValueError as e:
+        logger.warning(f"⚠️ Error de validación: {e}")
         await update.message.reply_text(f"❌ {str(e)}")
 
 async def estado_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
