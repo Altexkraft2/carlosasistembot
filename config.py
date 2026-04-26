@@ -25,7 +25,7 @@ class Config:
         {"start": "08:00", "end": "12:00"},
         {"start": "14:00", "end": "17:00"},
     ]
-    WORK_DAYS = [0, 1, 2, 3, 4]
+    WORK_DAYS = [0, 1, 2, 3, 4, 5, 6]
     
     # Rutas
     BASE_DIR = Path(__file__).parent
