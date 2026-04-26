@@ -1,124 +1,126 @@
 """
-Servicio de alertas con SQLAlchemy.
+Servicio de recordatorios con SQLAlchemy.
 """
+
 from datetime import datetime
-from database.models import ReminderDB, SessionLocal
+from typing import Optional, Dict, List
+from database.models import ReminderDB
 from database.repository_db import ReminderRepositoryDB
-from services.reminder_service_db import ReminderServiceDB
-from keyboards import inline_keyboards
-from utils.logger import setup_logger
 from config import Config
+from utils.logger import setup_logger
+from utils.validators import validate_frequency
 
 logger = setup_logger(__name__)
 
-class AlertServiceDB:
-    """Servicio para manejar alertas periódicas"""
+class ReminderServiceDB:
+    """Servicio de recordatorios con base de datos"""
     
-    def __init__(self, reminder_service: ReminderServiceDB = None):
-        self.reminder_service = reminder_service or ReminderServiceDB()
-        self.bot = None
-        logger.info("🔔 Servicio de alertas (DB) inicializado")
+    def __init__(self, repository: ReminderRepositoryDB = None):
+        self.repository = repository or ReminderRepositoryDB()
+        logger.info("🔄 Servicio de recordatorios (DB) inicializado")
     
-    def set_bot(self, bot):
-        self.bot = bot
-        logger.info("🤖 Bot vinculado")
+    def create_reminder(self, user_telegram_id: str, chat_id: int,
+                       frequency: int = None, message: str = None,
+                       keyword: str = None, username: str = None,
+                       first_name: str = None) -> ReminderDB:
+        """Crea un nuevo recordatorio con verificación de fotos"""
+        frequency = frequency or Config.DEFAULT_FREQUENCY_MINUTES
+        if not validate_frequency(frequency):
+            raise ValueError(f"La frecuencia debe ser entre 1 y 1440 minutos")
+        
+        if not message:
+            message = "⏰ ¡Es hora de tu recordatorio!"
+        if not keyword:
+            keyword = "RECORDATORIO"
+        
+        if self.repository.has_active_reminder_with_keyword(user_telegram_id, chat_id, keyword):
+            raise ValueError(f"Ya tienes un recordatorio activo con la palabra clave '{keyword}'")
+        
+        reminder = ReminderDB(
+            chat_id=str(chat_id),
+            keyword=keyword.upper(),
+            message=message,
+            frequency_minutes=frequency,
+            active=True,
+            photos_received=0,
+            photos_required=Config.PHOTOS_REQUIRED,
+            reminder_type='photo_verify'
+        )
+        
+        saved = self.repository.save(reminder, user_telegram_id, username, first_name)
+        logger.info(f"✅ Recordatorio creado: {saved.reminder_id}")
+        return saved
     
-    async def check_and_send_alerts(self) -> int:
-        """Verifica y envía alertas - USA SU PROPIA SESIÓN"""
-        if not self.bot:
-            return 0
-        
-        now = datetime.now()
-        logger.info(f"🕐 Verificando alertas: {now.strftime('%H:%M:%S')}")
-        
-        if not Config.is_work_time(now):
-            logger.info(f"⏸️ Fuera de horario laboral")
-            return 0
-        
-        # USAR UNA SESIÓN DIRECTA para todo el proceso
-        session = SessionLocal()
-        sent = 0
-        
-        try:
-            # Consultar recordatorios activos DIRECTAMENTE
-            from database.models import User
-            from sqlalchemy.orm import joinedload
-            
-            reminders = session.query(ReminderDB)\
-                .options(joinedload(ReminderDB.user))\
-                .filter(ReminderDB.active == True)\
-                .all()
-            
-            logger.info(f"🔍 Recordatorios activos encontrados: {len(reminders)}")
-            
+    def cancel_reminder(self, user_telegram_id: str, chat_id: int, keyword: str = None) -> bool:
+        """Cancela recordatorios"""
+        if keyword:
+            return self.repository.delete_by_keyword(user_telegram_id, chat_id, keyword)
+        else:
+            reminders = self.repository.find_active_by_user(user_telegram_id, chat_id)
             if not reminders:
-                logger.info("ℹ️ No hay recordatorios activos")
-                return 0
-            
-            # Mostrar cada recordatorio
+                return False
             for r in reminders:
-                user_id = r.user.telegram_id if r.user else "?"
-                logger.info(f"  📝 '{r.keyword}' | chat={r.chat_id} | user={user_id} | fotos={r.photos_received}/{r.photos_required} | last_alert={r.last_alert} | freq={r.frequency_minutes}min")
-            
-            # Procesar cada recordatorio
-            for reminder in reminders:
-                try:
-                    should_alert = reminder.should_alert(now)
-                    logger.info(f"  ⏰ '{reminder.keyword}': should_alert={should_alert}")
-                    
-                    if should_alert:
-                        logger.info(f"  📨 Enviando alerta a chat {reminder.chat_id}...")
-                        
-                        # Enviar mensaje
-                        try:
-                            remaining = max(0, Config.PHOTOS_REQUIRED - reminder.photos_received)
-                            message = (
-                                f"{reminder.message}\n\n"
-                                f"⚠️ Faltan {remaining} foto(s) con `{reminder.keyword}` para detener las alertas.\n"
-                                f"📸 Envía las fotos con la palabra clave en el pie de foto."
-                            )
-                            
-                            chat_id = reminder.chat_id
-                            if isinstance(chat_id, str) and chat_id.lstrip('-').isdigit():
-                                chat_id = int(chat_id)
-                            
-                            await self.bot.send_message(
-                                chat_id=chat_id,
-                                text=message,
-                                parse_mode='Markdown',
-                                reply_markup=inline_keyboards.get_alert_keyboard()
-                            )
-                            
-                            # Actualizar en la MISMA sesión
-                            reminder.last_alert = datetime.now()
-                            reminder.updated_at = datetime.now()
-                            
-                            # Guardar log de alerta
-                            from database.models import AlertLog
-                            log = AlertLog(
-                                reminder_id=reminder.id,
-                                status='sent'
-                            )
-                            session.add(log)
-                            session.commit()
-                            
-                            sent += 1
-                            logger.info(f"  ✅ Alerta enviada y guardada")
-                            
-                        except Exception as e:
-                            logger.error(f"  ❌ Error enviando alerta: {e}")
-                            session.rollback()
-                            
-                except Exception as e:
-                    logger.error(f"  ❌ Error procesando '{reminder.keyword}': {e}")
-                    session.rollback()
-            
-            logger.info(f"📨 Total alertas enviadas: {sent}")
-            return sent
-            
-        except Exception as e:
-            session.rollback()
-            logger.error(f"❌ Error general: {e}", exc_info=True)
-            return 0
-        finally:
-            session.close()
+                r.active = False
+                self.repository.save(r, user_telegram_id)
+            return True
+    
+    def get_active_reminder(self, user_telegram_id: str, chat_id: int, keyword: str) -> Optional[ReminderDB]:
+        """Obtiene un recordatorio activo específico"""
+        return self.repository.find_by_keyword(user_telegram_id, str(chat_id), keyword)
+    
+    def get_user_reminders(self, user_telegram_id: str, chat_id: int) -> List[ReminderDB]:
+        """Obtiene recordatorios de un usuario"""
+        return self.repository.find_active_by_user(user_telegram_id, chat_id)
+    
+    def get_chat_reminders(self, chat_id: int) -> List[ReminderDB]:
+        """Obtiene recordatorios de un chat"""
+        return self.repository.find_active_by_chat(chat_id)
+    
+    def get_reminder_status(self, user_telegram_id: str, chat_id: int, keyword: str) -> Optional[Dict]:
+        """Obtiene estado de un recordatorio"""
+        reminder = self.repository.find_by_keyword(user_telegram_id, str(chat_id), keyword)
+        if not reminder:
+            return None
+        return self._format_status(reminder)
+    
+    def _format_status(self, reminder: ReminderDB) -> Dict:
+        """Formatea el estado de un recordatorio"""
+        now = datetime.now()
+        minutes_active = int((now - reminder.created_at).total_seconds() / 60) if reminder.created_at else 0
+        
+        next_alert_in = None
+        if reminder.active and reminder.last_alert:
+            seconds_passed = (now - reminder.last_alert).total_seconds()
+            minutes_to_next = reminder.frequency_minutes - (seconds_passed / 60)
+            next_alert_in = max(0, round(minutes_to_next))
+        
+        return {
+            'id': reminder.id,
+            'active': reminder.active,
+            'message': reminder.message,
+            'keyword': reminder.keyword,
+            'frequency': reminder.frequency_minutes,
+            'photos_received': reminder.photos_received,
+            'photos_required': reminder.photos_required,
+            'photos_missing': reminder.photos_missing,
+            'reminder_type': reminder.reminder_type,
+            'last_alert': reminder.last_alert.isoformat() if reminder.last_alert else None,
+            'minutes_active': minutes_active,
+            'next_alert_in': next_alert_in,
+            'created_at': reminder.created_at.isoformat() if reminder.created_at else None,
+            'user_id': reminder.user.telegram_id if reminder.user else None
+        }
+    
+    def get_all_active_reminders(self) -> List[ReminderDB]:
+        """Obtiene todos los recordatorios activos"""
+        return self.repository.find_all_active()
+    
+    def get_stats(self) -> Dict:
+        """Obtiene estadísticas"""
+        return self.repository.get_stats()
+    
+    def process_photo(self, user_telegram_id: str, chat_id: int, caption: str) -> Dict:
+        """Procesa una foto recibida"""
+        from services.photo_service_db import PhotoServiceDB
+        photo_service = PhotoServiceDB(self.repository)
+        return photo_service.process_photo(user_telegram_id, chat_id, caption)

@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+##!/usr/bin/env python3
 """
 Bot de Telegram para recordatorios con verificación por fotos.
 Versión final con health check para Render.
@@ -19,6 +19,7 @@ from handlers import (
     get_about_handler,
     get_horario_handler,
     get_programar_handler,
+    get_recordar_handler,
     get_estado_handler,
     get_cancelar_handler,
     get_photo_handler,
@@ -68,9 +69,10 @@ def register_handlers():
     
     # Comandos de recordatorios
     app.add_handler(get_programar_handler())
+    app.add_handler(get_recordar_handler())
     app.add_handler(get_estado_handler())
     app.add_handler(get_cancelar_handler())
-    logger.info("  ✅ Handlers de recordatorios (3)")
+    logger.info("  ✅ Handlers de recordatorios (4)")
     
     # Handlers de interacción
     app.add_handler(get_photo_handler())
@@ -82,7 +84,7 @@ def register_handlers():
     app.add_handler(get_limpiar_grupo_handler())
     logger.info("  ✅ Handlers administrativos (2)")
     
-    logger.info(f"📋 Total: 11 handlers registrados")
+    logger.info(f"📋 Total: 12 handlers registrados")
 
 async def main():
     """Función principal asíncrona"""

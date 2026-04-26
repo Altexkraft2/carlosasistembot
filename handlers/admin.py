@@ -48,7 +48,8 @@ async def grupo_estado_command(update: Update, context: ContextTypes.DEFAULT_TYP
         for r in user_reminders:
             escaped_keyword = escape_markdown(r.keyword)
             freq_display = format_frequency(r.frequency_minutes)
-            message += f"  🔑 `{escaped_keyword}` - {r.photos_received}/{Config.PHOTOS_REQUIRED} 📸 - cada {freq_display}\n"
+            tipo = "📸" if r.reminder_type == 'photo_verify' else "📝"
+            message += f"  {tipo} `{escaped_keyword}` - {r.photos_received}/{r.photos_required} 📸 - cada {freq_display}\n"
         message += "\n"
     
     await update.message.reply_text(message, parse_mode='Markdown')

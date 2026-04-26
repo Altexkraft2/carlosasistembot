@@ -1,5 +1,6 @@
 """
 Modelos SQLAlchemy para la base de datos.
+Compatible con SQLAlchemy 1.4.x y 2.0.x
 """
 
 from datetime import datetime
@@ -9,9 +10,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from config import Config
 from sqlalchemy.pool import NullPool
-import os
+from config import Config
 
 Base = declarative_base()
 
@@ -27,7 +27,6 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     
-    # Relación con recordatorios
     reminders = relationship("ReminderDB", back_populates="user", cascade="all, delete-orphan")
     
     def __repr__(self):
@@ -51,55 +50,57 @@ class ReminderDB(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     
-    # Relación con usuario
-    user = relationship("User", back_populates="reminders")
+    # Campos para mensajes reenviados
+    original_message_id = Column(Integer, nullable=True)
+    original_message_type = Column(String(20), nullable=True)
+    original_caption = Column(Text, nullable=True)
+    original_file_id = Column(String(200), nullable=True)
     
-    # Relación con logs de alertas
+    # Tipo de recordatorio
+    reminder_type = Column(String(20), default='photo_verify')  # 'photo_verify' o 'simple'
+    
+    # Relaciones
+    user = relationship("User", back_populates="reminders")
     alert_logs = relationship("AlertLog", back_populates="reminder", cascade="all, delete-orphan")
     
     @property
     def reminder_id(self):
-        """ID compuesto para compatibilidad con código anterior"""
-        return f"{self.chat_id}_{self.user.telegram_id}_{self.keyword}"
+        user_telegram = self.user.telegram_id if self.user else "unknown"
+        return f"{self.chat_id}_{user_telegram}_{self.keyword}"
     
     @property
     def photos_missing(self):
-        """Fotos faltantes"""
         return max(0, self.photos_required - self.photos_received)
     
     @property
     def is_completed(self):
-        """¿Recordatorio completado?"""
+        if self.reminder_type == 'simple':
+            return not self.active
         return self.photos_received >= self.photos_required
     
     def should_alert(self, current_time: datetime) -> bool:
-        """Determina si debe enviarse una alerta ahora"""
         if not self.active:
             return False
-        
         if self.last_alert is None:
             return True
-        
         minutes_passed = (current_time - self.last_alert).total_seconds() / 60
         return minutes_passed >= self.frequency_minutes
     
     def add_photo(self) -> bool:
-        """Añade una foto y retorna True si completó"""
+        if self.reminder_type == 'simple':
+            return False
         self.photos_received += 1
         self.updated_at = datetime.now()
-        
         if self.photos_received >= self.photos_required:
             self.active = False
             return True
         return False
     
     def mark_alert_sent(self):
-        """Marca que se envió una alerta"""
         self.last_alert = datetime.now()
         self.updated_at = datetime.now()
     
     def to_dict(self) -> dict:
-        """Convierte a diccionario para compatibilidad"""
         return {
             'id': self.reminder_id,
             'user_id': self.user.telegram_id if self.user else None,
@@ -109,13 +110,14 @@ class ReminderDB(Base):
             'message': self.message,
             'keyword': self.keyword,
             'photos_received': self.photos_received,
+            'reminder_type': self.reminder_type,
             'last_alert': self.last_alert.isoformat() if self.last_alert else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
     
     def __repr__(self):
-        return f"ReminderDB(id={self.id}, keyword={self.keyword}, active={self.active})"
+        return f"ReminderDB(id={self.id}, keyword={self.keyword}, type={self.reminder_type}, active={self.active})"
 
 
 class AlertLog(Base):
@@ -125,14 +127,13 @@ class AlertLog(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     reminder_id = Column(Integer, ForeignKey('reminders.id'), nullable=False)
     sent_at = Column(DateTime, default=datetime.now)
-    status = Column(String(20), default='sent')  # sent, error, skipped
+    status = Column(String(20), default='sent')
     error_message = Column(Text, nullable=True)
     
-    # Relación con recordatorio
     reminder = relationship("ReminderDB", back_populates="alert_logs")
     
     def __repr__(self):
-        return f"AlertLog(id={self.id}, reminder_id={self.reminder_id}, sent_at={self.sent_at})"
+        return f"AlertLog(id={self.id}, reminder_id={self.reminder_id})"
 
 
 class PhotoLog(Base):
@@ -159,7 +160,7 @@ engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False},
     echo=False,
-    poolclass=NullPool  # ✅ NullPool para evitar errores de pool
+    poolclass=NullPool
 )
 
 SessionLocal = sessionmaker(
@@ -174,3 +175,11 @@ def init_db():
     Config.DATA_DIR.mkdir(exist_ok=True, parents=True)
     Base.metadata.create_all(bind=engine)
     print(f"✅ Base de datos inicializada en: {Config.DB_FILE}")
+
+def get_db():
+    """Obtiene una sesión de base de datos"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
