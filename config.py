@@ -22,10 +22,10 @@ class Config:
     
     # Horario laboral
     WORK_HOURS = [
-        {"start": "08:00", "end": "12:00"},
+        {"start": "07:30", "end": "12:00"},
         {"start": "14:00", "end": "17:00"},
     ]
-    WORK_DAYS = [0, 1, 2, 3, 4, 5, 6]
+    WORK_DAYS = [0, 1, 2, 3, 4,]
     
     # Rutas
     BASE_DIR = Path(__file__).parent
@@ -47,7 +47,7 @@ class Config:
         for period in cls.WORK_HOURS:
             if period["start"] <= current_time < period["end"]:
                 return True
-        return True
+        return False
     
     @classmethod
     def get_next_work_time(cls, dt=None):

@@ -20,27 +20,34 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "*AYUDA DEL BOT*\n\n"
         "*Comandos:*\n\n"
         "📝 `/programar [frecuencia] [palabra] [mensaje]`\n"
+        "   Crea un recordatorio que requiere 2 fotos para detenerse\n"
         "   *Frecuencias válidas:*\n"
         "   • `5min`, `30min` → minutos\n"
         "   • `1h`, `2h` → horas\n"
         "   • `1:30`, `0:45` → horas:minutos\n"
-        "   • `5`, `30` → minutos (por defecto)\n\n"
-        "   *Ejemplos:*\n"
-        "   `/programar 5min MEDICINA Tomar pastilla`\n"
-        "   `/programar 1h REUNION Hora de reunión`\n"
-        "   `/programar 1:30 DESCANSO Tiempo de pausa`\n\n"
+        "   • `diario`, `24h` → cada 24 horas\n\n"
+        "📝 `/recordar [frecuencia] [palabra]`\n"
+        "   Responde a un mensaje y crea un recordatorio simple\n"
+        "   El bot reenviará ese mensaje periódicamente\n"
+        "   Se detiene solo con `/cancelar [palabra]`\n"
+        "   *Ejemplo:* Responde a una foto y escribe `/recordar 24h IMPORTANTE`\n\n"
         "📊 `/estado` - Ver tus recordatorios\n"
         "📊 `/estado [palabra]` - Ver uno específico\n"
-        "❌ `/cancelar` - Cancelar todos\n"
-        "❌ `/cancelar [palabra]` - Cancelar uno\n"
-        "🕐 `/horario` - Horario laboral\n"
+        "❌ `/cancelar` - Cancelar todos tus recordatorios\n"
+        "❌ `/cancelar [palabra]` - Cancelar uno específico\n"
+        "🕐 `/horario` - Ver horario laboral\n"
         "👥 `/grupo_estado` - Ver todos en el grupo\n"
         "🧹 `/limpiar_grupo` - Cancelar todos (admin)"
     )
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
 async def about_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 Bot de Recordatorios v2.0\n📸 Verificación por fotos\n🔑 Múltiples recordatorios\n⏱️ Frecuencias flexibles")
+    await update.message.reply_text(
+        "🤖 Bot de Recordatorios v2.0\n"
+        "📸 Verificación por fotos\n"
+        "📝 Recordatorios simples\n"
+        "⏱️ Frecuencias flexibles"
+    )
 
 async def horario_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = datetime.now()
